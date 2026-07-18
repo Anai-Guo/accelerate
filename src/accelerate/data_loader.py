@@ -174,8 +174,22 @@ class BatchSamplerShard(BatchSampler):
 
     def __len__(self):
         if self.split_batches:
-            # Split batches does not change the length of the batch sampler
-            return len(self.batch_sampler)
+            # Splitting batches doesn't change how many batches each process sees, except that an
+            # uneven trailing batch (only produced when even_batches=False and drop_last=False) is
+            # handed out solely to the processes whose split slice actually falls inside it, mirroring
+            # `_iter_with_split`. Account for that so `len(shard)` matches `len(list(shard))` per rank.
+            length = len(self.batch_sampler)
+            if not self.drop_last and not self.even_batches and self.batch_size:
+                inner_sampler = getattr(self.batch_sampler, "sampler", None)
+                try:
+                    remainder = len(inner_sampler) % self.batch_size
+                except TypeError:
+                    remainder = 0
+                if remainder:
+                    batch_length = self.batch_size // self.num_processes
+                    if remainder <= batch_length * self.process_index:
+                        length -= 1
+            return length
         if len(self.batch_sampler) % self.num_processes == 0:
             # If the length is a round multiple of the number of processes, it's easy.
             return len(self.batch_sampler) // self.num_processes

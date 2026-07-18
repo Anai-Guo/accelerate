@@ -102,8 +102,9 @@ class DataLoaderTester(AccelerateTestCase):
             for i in range(2)
         ]
         batch_sampler_lists = [list(batch_sampler_shard) for batch_sampler_shard in batch_sampler_shards]
-        if not split_batches:
-            assert [len(shard) for shard in batch_sampler_shards] == [len(e) for e in expected]
+        # `len(shard)` must match the number of batches actually yielded for every configuration,
+        # including `split_batches=True` where an uneven trailing batch is not shared by all ranks.
+        assert [len(shard) for shard in batch_sampler_shards] == [len(e) for e in expected]
         assert batch_sampler_lists == expected
 
     def test_batch_sampler_shards_with_no_splits(self):
